@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# the system profile
+if [ -r /etc/profile ]; then
+    source /etc/profile
+fi
+
+# umask
+umask u+rwx,g+rwx,o+rx
+# the language/encoding
+export LANG=en_US.UTF-8
+
+# set the prompt
+turkish="\033[36m"
+gray="\033[90m"
+normal="\033[0m"
+export PS1="\[${turkish}\]\u@\h\[${normal}\]:\[${gray}\]\w\[${normal}\]>"
+
+# dynamic adjustments
+export PROMPT_COMMAND=prompter
+prompter() {
+  history -a
+}
+
+# history control
+export HISTSIZE=-1
+export HISTFILESIZE=-1
+export HISTCONTROL=ignoreboth:erasedups
+
+# append to history, don't overwrite it
+shopt -s histappend
+
+# enable color support of ls and also add handy aliases
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+fi
+
+# some more ls aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# programmable bash completions
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# git bash completions
+if [ -f /usr/share/bash-completion/completions/git ]; then
+  . /usr/share/bash-completion/completions/git
+fi
+
+# end of file
