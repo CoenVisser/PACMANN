@@ -4,6 +4,8 @@ Inspired by classic optimization problems, PACMANN incrementally moves collocati
 
 A comprehensive description of PACMANN is provided in the preprint [arXiv:2411.19632v1](https://arxiv.org/abs/2411.19632v1).
 
+This repository includes a .devcontainer that allows the project to be opened directly in a preconfigured docker container using VS Code and the Dev Containers extension.
+
 Repository DOI: [10.4121/ac3e81b2-987c-42ff-8c5f-2d303b19db17](https://doi.org/10.4121/ac3e81b2-987c-42ff-8c5f-2d303b19db17)
 
 
