@@ -1,0 +1,18 @@
+// .devcontainer/devcontainer.json
+{
+    "name": "PACMANN",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "workspaceFolder": "/home/user",
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/home/user/pacmann,type=bind"
+    ],
+    "extensions": [
+        "ms-python.debugpy",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+    ],
+    "remoteUser": "user",
+    "postCreateCommand": "pip install --break-system-packages -r /home/user/pacmann/requirements.txt",
+}

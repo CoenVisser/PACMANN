@@ -1,0 +1,31 @@
+// extensions to be installed: git graph, git lens, Code Spell Checker, python
+{
+    "git.repositoryScanMaxDepth": 3,
+    "git.autoRepositoryDetection": "subFolders",
+    "git.untrackedChanges": "separate",
+    "git.countBadge": "tracked",
+    "editor.rulers": [
+        100
+    ],
+    "editor.fontSize": 13,
+    "editor.tabSize": 4, // the number of spaces a tab is equal to
+    "editor.insertSpaces": true, // insert spaces when pressing Tab
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.formatOnPaste": true,
+        "editor.defaultFormatter": null,
+    },
+    "python.formatting.provider": "autopep8",
+    "python.terminal.executeInFileDir": true,
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    "python.formatting.autopep8Args": [
+        "--max-line-length",
+        "100",
+        "--experimental"
+    ],
+    "terminal.integrated.shell.linux": "/bin/bash",
+    "files.exclude": {
+        "**/.*": true
+    },
+}
