@@ -635,7 +635,75 @@ def PINN_Poisson(train_number,
 
     #########################################################
 
+    class H1_norm_callback(dde.callbacks.Callback):
+
+        def __init__(self, X_eval, train_number):
+            super().__init__()
+            self.X_eval = dde.backend.as_tensor(X_eval, dtype=dde.backend.float32)
+            self.np_X_eval = X_eval
+
+        def grad_solution(self, X_eval):
+            v_x1 = np.pi * np.cos(np.pi * X_eval[:, 0:1]) * np.sin(np.pi * X_eval[:, 1:2]) * np.sin(np.pi * X_eval[:, 2:3]) * np.sin(np.pi * X_eval[:, 3:4]) * np.sin(np.pi * X_eval[:, 4:5])
+            v_x2 = np.pi * np.sin(np.pi * X_eval[:, 0:1]) * np.cos(np.pi * X_eval[:, 1:2]) * np.sin(np.pi * X_eval[:, 2:3]) * np.sin(np.pi * X_eval[:, 3:4]) * np.sin(np.pi * X_eval[:, 4:5])
+            v_x3 = np.pi * np.sin(np.pi * X_eval[:, 0:1]) * np.sin(np.pi * X_eval[:, 1:2]) * np.cos(np.pi * X_eval[:, 2:3]) * np.sin(np.pi * X_eval[:, 3:4]) * np.sin(np.pi * X_eval[:, 4:5])
+            v_x4 = np.pi * np.sin(np.pi * X_eval[:, 0:1]) * np.sin(np.pi * X_eval[:, 1:2]) * np.sin(np.pi * X_eval[:, 2:3]) * np.cos(np.pi * X_eval[:, 3:4]) * np.sin(np.pi * X_eval[:, 4:5])
+            v_x5 = np.pi * np.sin(np.pi * X_eval[:, 0:1]) * np.sin(np.pi * X_eval[:, 1:2]) * np.sin(np.pi * X_eval[:, 2:3]) * np.sin(np.pi * X_eval[:, 3:4]) * np.cos(np.pi * X_eval[:, 4:5])
+
+            return v_x1, v_x2, v_x3, v_x4, v_x5
+
+
+        def on_train_end(self):
+            net = self.model.net   
+            device = next(net.parameters()).device
+            X = self.X_eval.to(device).double().requires_grad_(True)
+
+            Y = net(X)
+            n_out = Y.shape[1]
+
+            grads = []
+            for j in range(n_out):
+                grad_j = torch.autograd.grad(
+                    outputs=Y[:, j],
+                    inputs=X,
+                    grad_outputs=torch.ones_like(Y[:, j]),
+                    retain_graph=True,
+                    only_inputs=True,
+                )[0]
+                grads.append(grad_j.detach().cpu())
+
+            v_x1_exact, v_x2_exact, v_x3_exact, v_x4_exact, v_x5_exact = self.grad_solution(self.np_X_eval)
+
+            v_x1_pred = grads[0][:, 0].detach().cpu().numpy()[:, None]
+            v_x2_pred = grads[0][:, 1].detach().cpu().numpy()[:, None]
+            v_x3_pred = grads[0][:, 2].detach().cpu().numpy()[:, None]
+            v_x4_pred = grads[0][:, 3].detach().cpu().numpy()[:, None]
+            v_x5_pred = grads[0][:, 4].detach().cpu().numpy()[:, None]
+            
+            L2_v_x1 = np.linalg.norm(v_x1_exact - v_x1_pred)
+            L2_v_x2 = np.linalg.norm(v_x2_exact - v_x2_pred)
+            L2_v_x3 = np.linalg.norm(v_x3_exact - v_x3_pred)
+            L2_v_x4 = np.linalg.norm(v_x4_exact - v_x4_pred)
+            L2_v_x5 = np.linalg.norm(v_x5_exact - v_x5_pred)
+
+            L2_v_x1_exact = np.linalg.norm(v_x1_exact)
+            L2_v_x2_exact = np.linalg.norm(v_x2_exact)
+            L2_v_x3_exact = np.linalg.norm(v_x3_exact)
+            L2_v_x4_exact = np.linalg.norm(v_x4_exact)
+            L2_v_x5_exact = np.linalg.norm(v_x5_exact)
+
+            H1_rel_num = L2_v_x1 ** 2 + L2_v_x2 ** 2 + L2_v_x3 ** 2 + L2_v_x4 ** 2 + L2_v_x5 ** 2
+            H1_rel_den = L2_v_x1_exact ** 2 + L2_v_x2_exact ** 2 + L2_v_x3_exact ** 2 + L2_v_x4_exact ** 2 + L2_v_x5_exact ** 2
+            H1_rel = np.sqrt(H1_rel_num / H1_rel_den)
+
+            self.H1_rel = H1_rel
+
+    #########################################################
+
     start_time = time.time()
+
+    X_eval = model.data.test_x
+
+    H1_norm = H1_norm_callback(X_eval, train_number)
 
     for n in range(4):
         model.compile("adam", lr=learning_rate, metrics=['mean squared error', 'l2 relative error'])
@@ -648,24 +716,19 @@ def PINN_Poisson(train_number,
     model.train(iterations=7000, display_every=100, callbacks=resampler)
 
     model.compile("L-BFGS", metrics=['mean squared error', 'l2 relative error'])
-    losshistory, train_state = model.train(display_every=100)
+    losshistory, train_state = model.train(display_every=100, callbacks=[H1_norm])
 
     train_time = time.time() - start_time
 
-    loss_train = np.array([np.sum(loss) for loss in losshistory.loss_train])
-    MSE_error = np.array(losshistory.metrics_test)[:, 0]
     L2_error = np.array(losshistory.metrics_test)[:, 1]
 
-    lowest_loss = np.min(loss_train)
-    corresponding_epoch = losshistory.steps[np.argmin(loss_train)]
-    corresponding_MSE = MSE_error[np.argmin(loss_train)]
-    corresponding_L2 = L2_error[np.argmin(loss_train)]
-    print(f'Lowest loss: {lowest_loss} at epoch {corresponding_epoch}, MSE Error = {corresponding_MSE}, L2 Error = {corresponding_L2}')
+    L2_error_last = L2_error[-1]
+    H1_relative_norm = H1_norm.H1_rel
 
     if not os.path.exists(str(train_number)):
         os.makedirs(str(train_number))
 
-    output = [collocation_type, train_time, corresponding_MSE, corresponding_L2, np.min(MSE_error), np.min(L2_error), learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
+    output = [collocation_type, train_time, H1_relative_norm, L2_error_last, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
     output_file_path = os.path.join(str(train_number), 'output.csv')
 
     with open(output_file_path, 'w') as f:

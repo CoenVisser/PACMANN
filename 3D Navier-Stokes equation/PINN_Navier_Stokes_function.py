@@ -1027,8 +1027,115 @@ def PINN_NS(train_number,
 
     #########################################################
 
+    class H1_norm_callback(dde.callbacks.Callback):
+
+        def __init__(self, X_eval, train_number):
+            super().__init__()
+            self.X_eval = dde.backend.as_tensor(X_eval, dtype=dde.backend.float32)
+            self.np_X_eval = X_eval
+
+        def grad_solution(self, X_eval):
+            x = X_eval[:,0:1]
+            y = X_eval[:,1:2]
+            z = X_eval[:,2:3]
+            t = X_eval[:,3:4]
+
+            u_x = -np.exp(-t)*np.sin(x)*np.sin(y)*np.sin(z)
+            u_y = np.exp(-t)*np.sin(z)*np.cos(x)*np.cos(y)
+            u_z = np.exp(-t)*np.sin(y)*np.cos(x)*np.cos(z)
+
+            v_x = np.exp(-t)*np.sin(z)*np.cos(x)*np.cos(y)
+            v_y = -np.exp(-t)*np.sin(x)*np.sin(y)*np.sin(z)
+            v_z = np.exp(-t)*np.sin(x)*np.cos(y)*np.cos(z)
+
+            w_x = -2*np.exp(-t)*np.sin(y)*np.cos(x)*np.cos(z)
+            w_y = -2*np.exp(-t)*np.sin(x)*np.cos(y)*np.cos(z)
+            w_z = 2*np.exp(-t)*np.sin(x)*np.sin(y)*np.sin(z)
+
+            return [[u_x, u_y, u_z], [v_x, v_y, v_z], [w_x, w_y, w_z]]
+
+
+        def on_train_end(self):
+            net = self.model.net   
+            device = next(net.parameters()).device
+            X = self.X_eval.to(device).double().requires_grad_(True)
+
+            Y = net(X)
+            n_out = Y.shape[1]
+
+            grads = []
+            for j in range(n_out):
+                grad_j = torch.autograd.grad(
+                    outputs=Y[:, j],
+                    inputs=X,
+                    grad_outputs=torch.ones_like(Y[:, j]),
+                    retain_graph=True,
+                    only_inputs=True,
+                )[0]
+                grads.append(grad_j.detach().cpu())
+
+            [u_exact, v_exact, w_exact] = self.grad_solution(self.np_X_eval)
+
+            u_x_pred = grads[0][:, 0].detach().cpu().numpy()[:, None]
+            u_y_pred = grads[0][:, 1].detach().cpu().numpy()[:, None]
+            u_z_pred = grads[0][:, 2].detach().cpu().numpy()[:, None]
+
+            v_x_pred = grads[1][:, 0].detach().cpu().numpy()[:, None]
+            v_y_pred = grads[1][:, 1].detach().cpu().numpy()[:, None]
+            v_z_pred = grads[1][:, 2].detach().cpu().numpy()[:, None]
+
+            w_x_pred = grads[2][:, 0].detach().cpu().numpy()[:, None]
+            w_y_pred = grads[2][:, 1].detach().cpu().numpy()[:, None]
+            w_z_pred = grads[2][:, 2].detach().cpu().numpy()[:, None]
+            
+            L2_u_x = np.linalg.norm(u_exact[0] - u_x_pred)
+            L2_u_y = np.linalg.norm(u_exact[1] - u_y_pred)
+            L2_u_z = np.linalg.norm(u_exact[2] - u_z_pred)
+
+            L2_v_x = np.linalg.norm(v_exact[0] - v_x_pred)
+            L2_v_y = np.linalg.norm(v_exact[1] - v_y_pred)
+            L2_v_z = np.linalg.norm(v_exact[2] - v_z_pred)
+
+            L2_w_x = np.linalg.norm(w_exact[0] - w_x_pred)
+            L2_w_y = np.linalg.norm(w_exact[1] - w_y_pred)
+            L2_w_z = np.linalg.norm(w_exact[2] - w_z_pred)
+
+            L2_u_x_exact = np.linalg.norm(u_exact[0])
+            L2_u_y_exact = np.linalg.norm(u_exact[1])
+            L2_u_z_exact = np.linalg.norm(u_exact[2])
+
+            L2_v_x_exact = np.linalg.norm(v_exact[0])
+            L2_v_y_exact = np.linalg.norm(v_exact[1])
+            L2_v_z_exact = np.linalg.norm(v_exact[2])
+
+            L2_w_x_exact = np.linalg.norm(w_exact[0])
+            L2_w_y_exact = np.linalg.norm(w_exact[1])
+            L2_w_z_exact = np.linalg.norm(w_exact[2])
+
+
+            H1_rel_num_u = L2_u_x ** 2 + L2_u_y ** 2 + L2_u_z ** 2
+            H1_rel_den_u = L2_u_x_exact ** 2 + L2_u_y_exact ** 2 + L2_u_z_exact ** 2
+            H1_rel_u = np.sqrt(H1_rel_num_u / H1_rel_den_u)
+
+            H1_rel_num_v = L2_v_x ** 2 + L2_v_y ** 2 + L2_v_z ** 2
+            H1_rel_den_v = L2_v_x_exact ** 2 + L2_v_y_exact ** 2 + L2_v_z_exact ** 2
+            H1_rel_v = np.sqrt(H1_rel_num_v / H1_rel_den_v)
+
+            H1_rel_num_w = L2_w_x ** 2 + L2_w_y ** 2 + L2_w_z ** 2
+            H1_rel_den_w = L2_w_x_exact ** 2 + L2_w_y_exact ** 2 + L2_w_z_exact ** 2
+            H1_rel_w = np.sqrt(H1_rel_num_w / H1_rel_den_w)
+
+            self.H1_rel_u = H1_rel_u
+            self.H1_rel_v = H1_rel_v
+            self.H1_rel_w = H1_rel_w
+
+    #########################################################
 
     start_time = time.time()
+
+    X_eval = model.data.test_x
+
+    H1_norm = H1_norm_callback(X_eval, train_number)
 
     for n in range(4):
         model.compile("adam", lr=learning_rate)
@@ -1041,7 +1148,7 @@ def PINN_NS(train_number,
     model.train(iterations=7000, display_every=100, callbacks=resampler)
 
     model.compile("L-BFGS")
-    losshistory, train_state = model.train(display_every=100)
+    losshistory, train_state = model.train(display_every=100, callbacks=[H1_norm])
 
     train_time = time.time() - start_time
 
@@ -1070,10 +1177,14 @@ def PINN_NS(train_number,
     l2_difference_w = dde.metrics.l2_relative_error(w_exact, w_pred)
     l2_difference_p = dde.metrics.l2_relative_error(p_exact, p_pred)
 
+    H1_rel_u = H1_norm.H1_rel_u
+    H1_rel_v = H1_norm.H1_rel_v
+    H1_rel_w = H1_norm.H1_rel_w
+
     if not os.path.exists(str(train_number)):
         os.makedirs(str(train_number))
 
-    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
+    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, H1_rel_u, H1_rel_v, H1_rel_w, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
     output_file_path = os.path.join(str(train_number), 'output.csv')
 
     with open(output_file_path, 'w') as f:
