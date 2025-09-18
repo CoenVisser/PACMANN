@@ -25,7 +25,7 @@ Training_parameters_dictionary = {"random_seed"              : True,
                                   "save_collocation_points"  : False,
                                   "collocation_type"         : "Adam",
                                   "resample_period"          : 50,
-                                  "stepsize"                 : 1e-3,
+                                  "stepsize"                 : 1e-2,
                                   "number_of_iterations"     : 5
                                   }
 

@@ -35,7 +35,7 @@ def PINN_Laplace_Disk(train_number,
                       save_collocation_points_input   = False,
                       collocation_type_input          = "Adam",
                       resample_period_input           = 50,
-                      stepsize_input                  = 1e-3,
+                      stepsize_input                  = 1e-2,
                       number_of_iterations_input      = 5,
                       seed_input                      = 0000,
                       ):
@@ -63,35 +63,31 @@ def PINN_Laplace_Disk(train_number,
 
 
     def pde(x, y):
-        dy_xx = dde.grad.hessian(y, x, i=0, j=0)
-        dy_yy = dde.grad.hessian(y, x, i=1, j=1)
-        return dy_xx + dy_yy
+        dy_r = dde.grad.jacobian(y, x, i=0, j=0)
+        dy_rr = dde.grad.hessian(y, x, i=0, j=0)
+        dy_thetatheta = dde.grad.hessian(y, x, i=1, j=1)
+        return x[:, 0:1]**2 * dy_rr + x[:, 0:1] * dy_r + dy_thetatheta
     
 
     def residual_gradient_operator(x, y):
-        dy_xx = dde.grad.hessian(y, x, i=0, j=0)
-        dy_yy = dde.grad.hessian(y, x, i=1, j=1)
+        dy_r = dde.grad.jacobian(y, x, i=0, j=0)
+        dy_rr = dde.grad.hessian(y, x, i=0, j=0)
+        dy_thetatheta = dde.grad.hessian(y, x, i=1, j=1)
+        
+        res = (x[:, 0:1]**2 * dy_rr + x[:, 0:1] * dy_r + dy_thetatheta) ** 2
+        dres_X = dde.grad.jacobian(res, x, i=0)
 
-        r = (dy_xx + dy_yy) ** 2
-        dr_X = dde.grad.jacobian(r, x, i=0)
-
-        return dr_X
+        return dres_X
 
 
     def solution(x):
-        r = np.sqrt(x[:,0:1] ** 2 + x[:,1:2] ** 2)
-        theta = np.arctan2(x[:,1:2], x[:,0:1])
-        entire_solution = 0
-        order = 6
-        for n in range(1,order+1):
-            entire_solution += r**n * (np.cos(n * theta) + np.sin(n * theta))
-        return entire_solution
+        r = x[:, 0:1]
+        theta = x[:, 1:2]
+
+        return r**(3/5) * np.sin(3/5 * theta)
 
 
-    triangle_half_angle = 10.0
-    disk = dde.geometry.Disk([0, 0], 1)
-    triangle = dde.geometry.Triangle((0,0), (1.1, -np.sin(np.radians(triangle_half_angle))), (1.1, np.sin(np.radians(triangle_half_angle))))
-    geom = dde.geometry.csg.CSGDifference(disk, triangle)
+    geom = dde.geometry.Rectangle(xmin=[0, 0], xmax=[1, 5/3 * np.pi])
 
     bc = dde.icbc.DirichletBC(
         geom,
@@ -108,6 +104,7 @@ def PINN_Laplace_Disk(train_number,
             num_boundary = 75,
             solution = solution,
             train_distribution="uniform",
+            num_test=10000
         )
     elif collocation_type == "RAR" or collocation_type == "RAR_D":
         data = dde.data.PDE(
@@ -117,6 +114,7 @@ def PINN_Laplace_Disk(train_number,
             num_domain = number_collocation_points // 2,
             num_boundary = 75,
             solution = solution,
+            num_test=10000
         )
     else:
         data = dde.data.PDE(
@@ -126,6 +124,7 @@ def PINN_Laplace_Disk(train_number,
             num_domain = number_collocation_points,
             num_boundary = 75,
             solution = solution,
+            num_test=10000
         )
 
 
@@ -704,26 +703,48 @@ def PINN_Laplace_Disk(train_number,
 
         def __init__(self, X_eval, train_number):
             super().__init__()
+            X_eval = X_eval[np.where(X_eval[:,0]!=0)]
             self.X_eval = dde.backend.as_tensor(X_eval, dtype=dde.backend.float32)
             self.np_X_eval = X_eval
 
         def grad_solution(self, X_eval):
-            r = np.sqrt(X_eval[:,0:1] ** 2 + X_eval[:,1:2] ** 2)
-            theta = np.arctan2(X_eval[:,1:2], X_eval[:,0:1])
+            r = X_eval[:, 0:1]
+            theta = X_eval[:, 1:2]
 
-            h_r = 0
-            h_theta = 0
+            x_car = r * np.cos(theta)
+            y_car = r * np.sin(theta)
 
-            order = 6
+            r_x = x_car / r
+            r_y = y_car / r
 
-            for n in range(1,order+1):
-                h_r += n * r**(n-1) * (np.cos(n * theta) + np.sin(n * theta))
+            theta_x = -y_car / r**2
+            theta_y =  x_car / r**2
 
-            for n in range(1,order+1):
-                h_theta += r**n * ( -n * np.sin(n * theta) + n * np.cos(n * theta))
+            u_r = 3/5 * r**(-2/5) * np.sin(3/5*theta)
+            u_theta = 3/5 * r**(3/5) * np.cos(3/5*theta)
 
-            return r[:, -1], theta[:, -1], h_r[:, -1], h_theta[:, -1]
+            u_x = u_r * r_x + u_theta * theta_x
+            u_y = u_r * r_y + u_theta * theta_y
 
+            return u_x, u_y
+        
+        def transform(self, X_eval, u_r, u_theta):
+            r = X_eval[:, 0:1]
+            theta = X_eval[:, 1:2]
+
+            x_car = r * np.cos(theta)
+            y_car = r * np.sin(theta)
+
+            r_x = x_car / r
+            r_y = y_car / r
+
+            theta_x = -y_car / r**2
+            theta_y =  x_car / r**2
+
+            u_x = u_r * r_x + u_theta * theta_x
+            u_y = u_r * r_y + u_theta * theta_y
+
+            return u_x, u_y
 
         def on_train_end(self):
             net = self.model.net   
@@ -744,26 +765,21 @@ def PINN_Laplace_Disk(train_number,
                 )[0]
                 grads.append(grad_j.detach().cpu())
 
-            r, theta, h_r_exact, h_theta_exact = self.grad_solution(self.np_X_eval)
+            u_x_exact, u_y_exact = self.grad_solution(self.np_X_eval)
 
-            h_pred = Y.detach().cpu().numpy()
-            h_x_pred = grads[0][:, 0].detach().cpu().numpy()
-            h_y_pred = grads[0][:, 1].detach().cpu().numpy()
+            u_r_pred = grads[0][:, 0].detach().cpu().numpy()[:, None]
+            u_theta_pred = grads[0][:, 1].detach().cpu().numpy()[:, None]
 
-            h_exact = solution(self.X_eval.detach().cpu().numpy())
-            h_x_exact = h_r_exact * np.cos(theta) - h_theta_exact * (np.sin(theta) / r)
-            h_y_exact = h_r_exact * np.sin(theta) + h_theta_exact * (np.cos(theta) / r)
+            u_x_pred, u_y_pred = self.transform(self.np_X_eval, u_r_pred, u_theta_pred)
             
-            L2_h = np.linalg.norm(h_exact - h_pred)
-            L2_h_x = np.linalg.norm(h_x_exact - h_x_pred)
-            L2_h_y = np.linalg.norm(h_y_exact - h_y_pred)
+            L2_u_x = np.linalg.norm(u_x_exact - u_x_pred)
+            L2_u_y = np.linalg.norm(u_y_exact - u_y_pred)
 
-            L2_h_exact = np.linalg.norm(h_exact)
-            L2_h_x_exact = np.linalg.norm(h_x_exact)
-            L2_h_y_exact = np.linalg.norm(h_y_exact)
+            L2_u_x_exact = np.linalg.norm(u_x_exact)
+            L2_u_y_exact = np.linalg.norm(u_y_exact)
 
-            H1_rel_num = L2_h ** 2 + L2_h_x ** 2 + L2_h_y ** 2
-            H1_rel_den = L2_h_exact ** 2 + L2_h_x_exact ** 2 + L2_h_y_exact ** 2
+            H1_rel_num = L2_u_x ** 2 + L2_u_y ** 2
+            H1_rel_den = L2_u_x_exact ** 2 + L2_u_y_exact ** 2
             H1_rel = np.sqrt(H1_rel_num / H1_rel_den)
 
             self.H1_rel = H1_rel
