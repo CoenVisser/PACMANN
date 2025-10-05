@@ -2,7 +2,7 @@
 
 Inspired by classic optimization problems, PACMANN incrementally moves collocation points toward regions of higher residuals using gradient-based optimization algorithms guided by the gradient of the squared residual.
 
-A comprehensive description of PACMANN is provided in the preprint [arXiv:2411.19632v1](https://arxiv.org/abs/2411.19632v1).
+A comprehensive description of PACMANN is provided in the preprint [arXiv:2411.19632](https://arxiv.org/abs/2411.19632).
 
 This repository includes a .devcontainer that allows the project to be opened directly in a preconfigured docker container using VS Code and the Dev Containers extension.
 
