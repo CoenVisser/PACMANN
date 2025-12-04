@@ -6,8 +6,6 @@ A comprehensive description of PACMANN is provided in the preprint [arXiv:2411.1
 
 This repository includes a .devcontainer that allows the project to be opened directly in a preconfigured docker container using VS Code and the Dev Containers extension.
 
-Repository DOI: [10.4121/ac3e81b2-987c-42ff-8c5f-2d303b19db17](https://doi.org/10.4121/ac3e81b2-987c-42ff-8c5f-2d303b19db17)
-
 
 ## License
 The scripts in this repository are licensed under an **Apache License v2.0** (see [LICENSE](LICENSE))
