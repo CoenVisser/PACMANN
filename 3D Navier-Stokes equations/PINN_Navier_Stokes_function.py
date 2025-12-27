@@ -30,7 +30,7 @@ import deepxde as dde
 
 def PINN_NS(train_number, 
             random_seed_input               = True,
-            number_collocation_points_input = 300,
+            number_collocation_points_input = 250,
             learning_rate_input             = 1e-3,
             save_collocation_points_input   = False,
             collocation_type_input          = "Adam",
@@ -42,7 +42,7 @@ def PINN_NS(train_number,
 
     #################### Input Parameters ####################
 
-    Re = 1e0
+    Re = 1e3
 
     if random_seed_input:
         random_seed = random.randint(0, 10000)
@@ -279,6 +279,9 @@ def PINN_NS(train_number,
     boundary_condition_w = dde.icbc.DirichletBC(
         spatio_temporal_domain, w_func, lambda _, on_boundary: on_boundary, component=2
     )
+    boundary_condition_p = dde.icbc.DirichletBC(
+        spatio_temporal_domain, p_func, lambda _, on_boundary: on_boundary, component=3
+    )
 
     initial_condition_u = dde.icbc.IC(
         spatio_temporal_domain, u_func, lambda _, on_initial: on_initial, component=0
@@ -289,9 +292,12 @@ def PINN_NS(train_number,
     initial_condition_w = dde.icbc.IC(
         spatio_temporal_domain, w_func, lambda _, on_initial: on_initial, component=2
     )
+    initial_condition_p = dde.icbc.IC(
+        spatio_temporal_domain, p_func, lambda _, on_initial: on_initial, component=3
+    )
 
     if collocation_type == "Uniform":
-        def cube_face_points(axis, fixed_value, pts_number):
+        def cube_points(axis, fixed_value, pts_number):
             x_bc = np.linspace(-1, 1, pts_number)
             y_bc = np.linspace(-1, 1, pts_number)
             z_bc = np.linspace(-1, 1, pts_number)
@@ -305,42 +311,41 @@ def PINN_NS(train_number,
                 
 
             X_BC, Y_BC, Z_BC = np.meshgrid(x_bc,
-                                        y_bc,
-                                        z_bc)
+                                           y_bc,
+                                           z_bc)
             
-            face_pts = np.stack([
-                X_BC.ravel(),
-                Y_BC.ravel(),
-                Z_BC.ravel()], axis=1)
+            pts = np.stack([X_BC.ravel(),
+                            Y_BC.ravel(),
+                            Z_BC.ravel()], axis=1)
             
-            return face_pts
+            return pts
 
-        t_surface = np.linspace(0, 1, 4+1)[1:]
+        t_cube_pts = np.linspace(0, 1, 3+1)[1:]
 
-        bc_surface_pts = np.vstack([cube_face_points('x', 1, 3),
-                                    cube_face_points('x', -1, 3),
-                                    cube_face_points('y', 1, 3),
-                                    cube_face_points('y', -1, 3),
-                                    cube_face_points('z', 1, 3),
-                                    cube_face_points('z', -1, 3)])
+        bc_cube_pts = np.vstack([cube_points('x', 1, 8),
+                                 cube_points('x', -1, 8),
+                                 cube_points('y', 1, 8),
+                                 cube_points('y', -1, 8),
+                                 cube_points('z', 1, 8),
+                                 cube_points('z', -1, 8)])
 
-        bc_unique_surface_pts = np.unique(bc_surface_pts, axis=0)
-        bc_unique_surface_pts_repeated = np.repeat(bc_unique_surface_pts, len(t_surface), axis=0)
+        bc_unique_cube_pts = np.unique(bc_cube_pts, axis=0)
+        bc_unique_cube_pts_repeated = np.repeat(bc_unique_cube_pts, len(t_cube_pts), axis=0)
 
-        t_surface_tiled = np.sort(np.tile(t_surface, len(bc_unique_surface_pts)))[:, np.newaxis]
+        t_cube_tiled = np.sort(np.tile(t_cube_pts, len(bc_unique_cube_pts)))[:, np.newaxis]
 
-        bc_points = np.hstack([bc_unique_surface_pts_repeated, t_surface_tiled])
+        bc_points = np.hstack([bc_unique_cube_pts_repeated, t_cube_tiled])
 
-        ic_surface_pts = np.vstack([cube_face_points('x', 1, 5),
-                                    cube_face_points('x', -1, 5),
-                                    cube_face_points('y', 1, 5),
-                                    cube_face_points('y', -1, 5),
-                                    cube_face_points('z', 1, 5),
-                                    cube_face_points('z', -1, 5)])
+        ic_cube_pts = np.vstack([cube_points('x', 1, 7),
+                                 cube_points('x', -1, 7),
+                                 cube_points('y', 1, 7),
+                                 cube_points('y', -1, 7),
+                                 cube_points('z', 1, 7),
+                                 cube_points('z', -1, 7)])
 
-        ic_unique_surface_pts = np.unique(ic_surface_pts, axis=0)
+        ic_unique_cube_pts = np.unique(ic_cube_pts, axis=0)
 
-        ic_points = np.hstack([ic_unique_surface_pts, np.zeros(len(ic_unique_surface_pts))[:, np.newaxis]])
+        ic_points = np.hstack([ic_unique_cube_pts, np.zeros(len(ic_unique_cube_pts))[:, np.newaxis]])
 
         uniform_boundary_condition_u = dde.icbc.PointSetBC(
             bc_points, u_func(bc_points), 0
@@ -350,6 +355,9 @@ def PINN_NS(train_number,
         )
         uniform_boundary_condition_w = dde.icbc.PointSetBC(
             bc_points, w_func(bc_points), 2
+        )
+        uniform_boundary_condition_p = dde.icbc.PointSetBC(
+            bc_points, p_func(bc_points), 3
         )
 
         uniform_initial_condition_u = dde.icbc.PointSetBC(
@@ -361,6 +369,9 @@ def PINN_NS(train_number,
         uniform_initial_condition_w = dde.icbc.PointSetBC(
             ic_points, w_func(ic_points), 2
         )
+        uniform_initial_condition_p = dde.icbc.PointSetBC(
+            ic_points, p_func(ic_points), 3
+        )
 
         data = dde.data.TimePDE(
             spatio_temporal_domain,
@@ -369,9 +380,11 @@ def PINN_NS(train_number,
                 uniform_boundary_condition_u,
                 uniform_boundary_condition_v,
                 uniform_boundary_condition_w,
+                uniform_boundary_condition_p,
                 uniform_initial_condition_u,
                 uniform_initial_condition_v,
                 uniform_initial_condition_w,
+                uniform_initial_condition_p,
             ],
             num_domain=number_collocation_points,
             num_boundary=0,
@@ -386,13 +399,15 @@ def PINN_NS(train_number,
                 boundary_condition_u,
                 boundary_condition_v,
                 boundary_condition_w,
+                boundary_condition_p,
                 initial_condition_u,
                 initial_condition_v,
                 initial_condition_w,
+                initial_condition_p,
             ],
             num_domain=number_collocation_points // 2,
-            num_boundary=75,
-            num_initial=75,
+            num_boundary=1000,
+            num_initial=250,
             num_test=10000,
         )
     else:
@@ -403,13 +418,15 @@ def PINN_NS(train_number,
                 boundary_condition_u,
                 boundary_condition_v,
                 boundary_condition_w,
+                boundary_condition_p,
                 initial_condition_u,
                 initial_condition_v,
                 initial_condition_w,
+                initial_condition_p,
             ],
             num_domain=number_collocation_points,
-            num_boundary=75,
-            num_initial=75,
+            num_boundary=1000,
+            num_initial=250,
             num_test=10000,
         )
 
@@ -425,7 +442,7 @@ def PINN_NS(train_number,
             of BC points to obtain the collocation points. https://deepxde.readthedocs.io/en/latest/modules/deepxde.data.html#deepxde.data.pde.PDE.train_x
             """
             f.write(f'0:\n')
-            np.savetxt(f, model.data.train_x[600:, :])
+            np.savetxt(f, model.data.train_x[6250:, :])
 
     #################### Sampling Methods ####################
     class Static_uniform(dde.callbacks.Callback):
@@ -443,7 +460,7 @@ def PINN_NS(train_number,
                 x_uniform = np.linspace(-1, 1, 4)
                 y_uniform = np.linspace(-1, 1, 4)
                 z_uniform = np.linspace(-1, 1, 4)
-                t_uniform = np.linspace(0, 1, 5)
+                t_uniform = np.linspace(0, 1, 4)
 
                 X_uniform, Y_uniform, Z_uniform, T_uniform = np.meshgrid(x_uniform,
                                                                          y_uniform,
@@ -478,7 +495,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points_extracted = self.model.data.train_x[600:, :]
+                collocation_points_extracted = self.model.data.train_x[6250:, :]
                 data.replace_with_anchors(collocation_points_extracted)
                 self.first_resample = False
 
@@ -531,7 +548,7 @@ def PINN_NS(train_number,
                 return
 
             if self.first_resample:
-                collocation_points_extracted = self.model.data.train_x[600:, :]
+                collocation_points_extracted = self.model.data.train_x[6250:, :]
                 data.replace_with_anchors(collocation_points_extracted)
                 self.first_resample = False
 
@@ -614,7 +631,7 @@ def PINN_NS(train_number,
                 return
 
             if self.first_resample:
-                collocation_points_extracted = self.model.data.train_x[600:, :]
+                collocation_points_extracted = self.model.data.train_x[6250:, :]
                 data.replace_with_anchors(collocation_points_extracted)
                 self.first_resample = False
             
@@ -658,7 +675,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -707,7 +724,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -758,7 +775,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -814,7 +831,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -872,7 +889,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -932,7 +949,7 @@ def PINN_NS(train_number,
             self.epochs_since_last_resample = 0
 
             if self.first_resample:
-                collocation_points = self.model.data.train_x[600:, :]
+                collocation_points = self.model.data.train_x[6250:, :]
                 self.first_resample = False
             else:
                 collocation_points = self.model.data.train_x_all
@@ -1052,7 +1069,11 @@ def PINN_NS(train_number,
             w_y = -2*np.exp(-t)*np.sin(x)*np.cos(y)*np.cos(z)
             w_z = 2*np.exp(-t)*np.sin(x)*np.sin(y)*np.sin(z)
 
-            return [[u_x, u_y, u_z], [v_x, v_y, v_z], [w_x, w_y, w_z]]
+            p_x = -np.exp(-t)*np.sin(x)*np.cos(y)*np.cos(z)
+            p_y = -np.exp(-t)*np.sin(y)*np.cos(x)*np.cos(z)
+            p_z = -np.exp(-t)*np.sin(z)*np.cos(x)*np.cos(y)
+
+            return [[u_x, u_y, u_z], [v_x, v_y, v_z], [w_x, w_y, w_z], [p_x, p_y, p_z]]
 
 
         def on_train_end(self):
@@ -1074,7 +1095,7 @@ def PINN_NS(train_number,
                 )[0]
                 grads.append(grad_j.detach().cpu())
 
-            [u_exact, v_exact, w_exact] = self.grad_solution(self.np_X_eval)
+            [u_exact, v_exact, w_exact, p_exact] = self.grad_solution(self.np_X_eval)
 
             u_x_pred = grads[0][:, 0].detach().cpu().numpy()[:, None]
             u_y_pred = grads[0][:, 1].detach().cpu().numpy()[:, None]
@@ -1087,6 +1108,10 @@ def PINN_NS(train_number,
             w_x_pred = grads[2][:, 0].detach().cpu().numpy()[:, None]
             w_y_pred = grads[2][:, 1].detach().cpu().numpy()[:, None]
             w_z_pred = grads[2][:, 2].detach().cpu().numpy()[:, None]
+
+            p_x_pred = grads[3][:, 0].detach().cpu().numpy()[:, None]
+            p_y_pred = grads[3][:, 1].detach().cpu().numpy()[:, None]
+            p_z_pred = grads[3][:, 2].detach().cpu().numpy()[:, None]
             
             L2_u_x = np.linalg.norm(u_exact[0] - u_x_pred)
             L2_u_y = np.linalg.norm(u_exact[1] - u_y_pred)
@@ -1100,6 +1125,10 @@ def PINN_NS(train_number,
             L2_w_y = np.linalg.norm(w_exact[1] - w_y_pred)
             L2_w_z = np.linalg.norm(w_exact[2] - w_z_pred)
 
+            L2_p_x = np.linalg.norm(p_exact[0] - p_x_pred)
+            L2_p_y = np.linalg.norm(p_exact[1] - p_y_pred)
+            L2_p_z = np.linalg.norm(p_exact[2] - p_z_pred)
+
             L2_u_x_exact = np.linalg.norm(u_exact[0])
             L2_u_y_exact = np.linalg.norm(u_exact[1])
             L2_u_z_exact = np.linalg.norm(u_exact[2])
@@ -1112,6 +1141,9 @@ def PINN_NS(train_number,
             L2_w_y_exact = np.linalg.norm(w_exact[1])
             L2_w_z_exact = np.linalg.norm(w_exact[2])
 
+            L2_p_x_exact = np.linalg.norm(p_exact[0])
+            L2_p_y_exact = np.linalg.norm(p_exact[1])
+            L2_p_z_exact = np.linalg.norm(p_exact[2])
 
             H1_rel_num_u = L2_u_x ** 2 + L2_u_y ** 2 + L2_u_z ** 2
             H1_rel_den_u = L2_u_x_exact ** 2 + L2_u_y_exact ** 2 + L2_u_z_exact ** 2
@@ -1125,9 +1157,14 @@ def PINN_NS(train_number,
             H1_rel_den_w = L2_w_x_exact ** 2 + L2_w_y_exact ** 2 + L2_w_z_exact ** 2
             H1_rel_w = np.sqrt(H1_rel_num_w / H1_rel_den_w)
 
+            H1_rel_num_p = L2_p_x ** 2 + L2_p_y ** 2 + L2_p_z ** 2
+            H1_rel_den_p = L2_p_x_exact ** 2 + L2_p_y_exact ** 2 + L2_p_z_exact ** 2
+            H1_rel_p = np.sqrt(H1_rel_num_p / H1_rel_den_p)
+
             self.H1_rel_u = H1_rel_u
             self.H1_rel_v = H1_rel_v
             self.H1_rel_w = H1_rel_w
+            self.H1_rel_p = H1_rel_p
 
     #########################################################
 
@@ -1180,11 +1217,12 @@ def PINN_NS(train_number,
     H1_rel_u = H1_norm.H1_rel_u
     H1_rel_v = H1_norm.H1_rel_v
     H1_rel_w = H1_norm.H1_rel_w
+    H1_rel_p = H1_norm.H1_rel_p
 
     if not os.path.exists(str(train_number)):
         os.makedirs(str(train_number))
 
-    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, H1_rel_u, H1_rel_v, H1_rel_w, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
+    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, H1_rel_u, H1_rel_v, H1_rel_w, H1_rel_p, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
     output_file_path = os.path.join(str(train_number), 'output.csv')
 
     with open(output_file_path, 'w') as f:

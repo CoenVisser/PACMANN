@@ -16,20 +16,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from PINN_Navier_Stokes_function import PINN_NS
+from PINN_plate_function import PINN_plate
 
 # Define the training parameters
 Training_parameters_dictionary = {"random_seed"              : True, 
-                                  "number_collocation_points": 300,
+                                  "number_collocation_points": 5000,
                                   "learning_rate"            : 1e-3,
                                   "save_collocation_points"  : False,
                                   "collocation_type"         : "Adam",
                                   "resample_period"          : 50,
-                                  "stepsize"                 : 1e-4,
+                                  "stepsize"                 : 1e-6,
                                   "number_of_iterations"     : 5
                                   }
 
-Number_of_runs = 10
+Number_of_runs = 1
 
 """
 Collocation point sampling options: 
@@ -66,4 +66,4 @@ for i in range(len(All_parameters)):
 
     Function_arguments = [i] + All_parameters[i]
 
-    PINN_NS(*Function_arguments)
+    PINN_plate(*Function_arguments)
