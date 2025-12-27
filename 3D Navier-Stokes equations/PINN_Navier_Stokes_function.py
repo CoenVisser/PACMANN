@@ -1108,10 +1108,6 @@ def PINN_NS(train_number,
             w_x_pred = grads[2][:, 0].detach().cpu().numpy()[:, None]
             w_y_pred = grads[2][:, 1].detach().cpu().numpy()[:, None]
             w_z_pred = grads[2][:, 2].detach().cpu().numpy()[:, None]
-
-            p_x_pred = grads[3][:, 0].detach().cpu().numpy()[:, None]
-            p_y_pred = grads[3][:, 1].detach().cpu().numpy()[:, None]
-            p_z_pred = grads[3][:, 2].detach().cpu().numpy()[:, None]
             
             L2_u_x = np.linalg.norm(u_exact[0] - u_x_pred)
             L2_u_y = np.linalg.norm(u_exact[1] - u_y_pred)
@@ -1125,10 +1121,6 @@ def PINN_NS(train_number,
             L2_w_y = np.linalg.norm(w_exact[1] - w_y_pred)
             L2_w_z = np.linalg.norm(w_exact[2] - w_z_pred)
 
-            L2_p_x = np.linalg.norm(p_exact[0] - p_x_pred)
-            L2_p_y = np.linalg.norm(p_exact[1] - p_y_pred)
-            L2_p_z = np.linalg.norm(p_exact[2] - p_z_pred)
-
             L2_u_x_exact = np.linalg.norm(u_exact[0])
             L2_u_y_exact = np.linalg.norm(u_exact[1])
             L2_u_z_exact = np.linalg.norm(u_exact[2])
@@ -1140,10 +1132,6 @@ def PINN_NS(train_number,
             L2_w_x_exact = np.linalg.norm(w_exact[0])
             L2_w_y_exact = np.linalg.norm(w_exact[1])
             L2_w_z_exact = np.linalg.norm(w_exact[2])
-
-            L2_p_x_exact = np.linalg.norm(p_exact[0])
-            L2_p_y_exact = np.linalg.norm(p_exact[1])
-            L2_p_z_exact = np.linalg.norm(p_exact[2])
 
             H1_rel_num_u = L2_u_x ** 2 + L2_u_y ** 2 + L2_u_z ** 2
             H1_rel_den_u = L2_u_x_exact ** 2 + L2_u_y_exact ** 2 + L2_u_z_exact ** 2
@@ -1157,14 +1145,9 @@ def PINN_NS(train_number,
             H1_rel_den_w = L2_w_x_exact ** 2 + L2_w_y_exact ** 2 + L2_w_z_exact ** 2
             H1_rel_w = np.sqrt(H1_rel_num_w / H1_rel_den_w)
 
-            H1_rel_num_p = L2_p_x ** 2 + L2_p_y ** 2 + L2_p_z ** 2
-            H1_rel_den_p = L2_p_x_exact ** 2 + L2_p_y_exact ** 2 + L2_p_z_exact ** 2
-            H1_rel_p = np.sqrt(H1_rel_num_p / H1_rel_den_p)
-
             self.H1_rel_u = H1_rel_u
             self.H1_rel_v = H1_rel_v
             self.H1_rel_w = H1_rel_w
-            self.H1_rel_p = H1_rel_p
 
     #########################################################
 
@@ -1217,12 +1200,11 @@ def PINN_NS(train_number,
     H1_rel_u = H1_norm.H1_rel_u
     H1_rel_v = H1_norm.H1_rel_v
     H1_rel_w = H1_norm.H1_rel_w
-    H1_rel_p = H1_norm.H1_rel_p
 
     if not os.path.exists(str(train_number)):
         os.makedirs(str(train_number))
 
-    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, H1_rel_u, H1_rel_v, H1_rel_w, H1_rel_p, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
+    output = [collocation_type, train_time, l2_difference_u, l2_difference_v, l2_difference_w, l2_difference_p, H1_rel_u, H1_rel_v, H1_rel_w, learning_rate, stepsize, number_collocation_points, random_seed, resample_period, number_of_iterations]
     output_file_path = os.path.join(str(train_number), 'output.csv')
 
     with open(output_file_path, 'w') as f:
